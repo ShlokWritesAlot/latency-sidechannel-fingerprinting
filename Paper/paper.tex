@@ -499,11 +499,11 @@ coordinates {
 \end{figure}
 
 \FloatBarrier
-Looking at table ~\ref{tab:query_accuracy} along with figure ~\ref{fig:accuracy_vs_query_count}, you can spot how query numbers tie into accuracy. More timing data tends to lift classification quality. Performance crept up from 80.00\% using one query, reaching 87.5\% once ten entered the mix. Though small gains, they follow a steady climb.
+Looking at Table IV along with Figure 9, it can be observed that increasing the number of queries generally improves classification accuracy. Performance increased from 80.00\% using a single query to 87.5\% when ten queries were utilized. Although the improvement is moderate, the overall trend indicates that additional timing observations improve architecture separability.
 
-One reason for smoother results with larger query counts? Gathering multiple time samples smooths out random hiccups in how fast things run. Odd little jumps seen partway through could come from background task shifts or tiny delays deep in the machine while predictions happen
+One possible explanation for the improved stability at higher query counts is that multiple timing samples help reduce the effect of transient execution noise and system-level timing fluctuations. Minor variations observed at intermediate query counts may be influenced by background processes or small execution inconsistencies during inference.
 
-Surprisingly clear outcomes emerge when black-box data is captured again and again - each new recording sharpens the ability to pin down a model. This steady gain hints that timing patterns, paired with smart number crunching, can indeed expose hidden identities behind software systems.
+The results further suggest that repeated timing observations strengthen the ability to distinguish neural network architectures in black-box environments. Overall, the findings indicate that latency patterns, combined with statistical feature extraction, can effectively reveal structural characteristics of deployed neural network systems.
 % ---------------- DISCUSSION -------------
 % DUMMY PARAGRAPHS (REPLACE LATER) 
 \section{Discussion}
