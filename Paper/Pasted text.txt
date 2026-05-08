@@ -1,6 +1,5 @@
-\documentclass[conference]{IEEEtran}
 
-\IEEEoverridecommandlockouts
+\documentclass[conference]{IEEEtran}
 
 \usepackage{amsmath}
 \usepackage{graphicx}
@@ -10,28 +9,13 @@
 \usepackage{tikz}
 \usepackage{pgfplots}
 \usepackage{placeins}
+\usepackage{float}
 \usepackage{xcolor}
-\usepackage{cite}
-\usepackage{url}
-\usepackage{array}
-\setlength{\textfloatsep}{8pt}
-\setlength{\floatsep}{6pt}
-\setlength{\intextsep}{6pt}
-\usepackage{balance}
-\setlength{\abovecaptionskip}{6pt}
-\setlength{\belowcaptionskip}{2pt}
+
 \pgfplotsset{compat=1.18}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, calc}
 
-\usetikzlibrary{
-    arrows.meta,
-    positioning,
-    shapes.geometric,
-    calc
-}
-
-\title{
-Latency Side-Channel Fingerprinting of Neural Network Architectures via Inference Timing Analysis
-}
+\title{Latency Side-Channel Fingerprinting of Neural Network Architectures via Inference Timing Analysis}
 
 \author{
 \IEEEauthorblockN{Shlok Pandey}
@@ -46,7 +30,6 @@ Email: shlokpandey8219@gmail.com
 \raggedbottom
 \maketitle
 
-
 % ---------------- ABSTRACT ----------------
 \begin{abstract}
 Latency-based side-channel leakage has emerged as a potential security risk in modern machine learning deployment environments. This paper investigates whether inference latency can be exploited to fingerprint neural network architectures in black-box settings. Different architectures, including VGG, ResNet, and Inception, exhibit distinct computational graph structures that influence inference timing behavior. The proposed methodology evaluates inference latency under controlled experimental conditions and extracts statistical timing features such as mean latency, standard deviation, and tail latency. These features are subsequently used for architecture classification using lightweight machine learning classifiers. Experimental results demonstrate that different architectures produce distinguishable timing signatures, enabling effective architecture identification using latency information alone. The findings highlight the security implications of timing leakage in machine learning systems and demonstrate that inference latency can act as a practical side-channel for neural network fingerprinting in cloud-based deployment settings.
@@ -55,11 +38,11 @@ Latency-based side-channel leakage has emerged as a potential security risk in m
 % ---------------- INTRODUCTION ----------------
 \section{Introduction}
 
-Most cloud platforms and machine learning services provide hosted models through API-based interfaces. These services allow the user to query the system and get outputs. They often run in a black-box environment where the user has no visibility into the internal architecture. While this abstraction greatly improves usability and user access while protecting intellectual property, it also introduces potential security risks. In particular, systems may unintentionally leak information through side channels such as inference latency~\cite{kocher,csinn,host2020}, power usage, memory/cache behavior, CPU/GPU utilization, packet sizes, and response sizes.
+Most cloud platforms and machine learning services provide hosted models through API-based interfaces. These services allow the user to query the system and get outputs. They often run in a black-box environment where the user has no visibility into the internal architecture. While this abstraction greatly improves usability and user access while protecting intellectual property, it also introduces potential security risks. In particular, systems may unintentionally leak information through side channels such as inference latency, power usage, memory/cache behavior, CPU/GPU utilization, packet sizes, and response sizes.
 
 Side-channel analysis has historically shown that indirect execution signals can reveal sensitive implementation details even when the primary algorithm is not directly compromised \cite{kocher}. In machine learning systems, recent work has shown that model behavior, query patterns, hardware traces, and implementation-level signals can expose information about deployed models \cite{prada,deepsniffer,csinn,host2020}. These risks are especially relevant as machine-learning-as-a-service platforms increasingly expose high-value models through black-box interfaces.
 
-In this academic work, we focus specifically on inference latency. We methodically investigate whether the response time of neural network inference can reveal structural information about the underlying model, which can later possibly be used to create surrogate models~\cite{knockoff,prada}. We hypothesize that differences in the computational graph structures across architectures like VGG, ResNet, and Inception can leak distinct latency signatures that can be exploited for model fingerprinting.
+In this academic work, we focus specifically on inference latency. We methodically investigate whether the response time of neural network inference can reveal structural information about the underlying model, which can later possibly be used to create surrogate models. We hypothesize that differences in the computational graph structures across architectures like VGG, ResNet, and Inception can leak distinct latency signatures that can be exploited for model fingerprinting.
 
 % ---------------- BACKGROUND ----------------
 \section{Background}
@@ -74,9 +57,9 @@ Modern neural network architectures can be modeled as DAGs, where the execution 
 
 Neural network architectures vary significantly in their computational structure, execution flow, and layer organization. These differences in the architecture influence both model performance and inference characteristics.
 
-Sequential models such as VGG are characterized by their depth~\cite{vgg}. VGG has deep stacks of convolutional layers arranged in a linear manner in a straightforward execution graph with minimal branching. Due to this highly sequential structure, inference propagates through a long chain of dependent operations.
+Sequential models such as VGG are characterized by their depth. VGG has deep stacks of convolutional layers arranged in a linear manner in a straightforward execution graph with minimal branching. Due to this highly sequential structure, inference propagates through a long chain of dependent operations.
 
-\begin{figure}[t]
+\begin{figure}[!t]
 \centering
 \resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
@@ -87,7 +70,7 @@ Sequential models such as VGG are characterized by their depth~\cite{vgg}. VGG h
         minimum width=1.15cm,
         minimum height=0.52cm,
         align=center,
-        font=\footnotesize,
+        font=\scriptsize,
         fill=blue!15,
         draw=blue!60,
         thick
@@ -114,9 +97,9 @@ Sequential models such as VGG are characterized by their depth~\cite{vgg}. VGG h
 \label{fig:vgg}
 \end{figure}
 
-In contrast, architectures like ResNet are not just one single layer like VGG; they introduce a stack of repeating residual blocks connected through skip connections, which produce a branch-and-merge computation graph, allowing information to bypass intermediate layers~\cite{resnet}. Consequently, the execution flow is no longer strictly sequential, producing a more complex Directed Acyclic Graph (DAG) structure compared to VGG.
+In contrast, architectures like ResNet are not just one single layer like VGG; they introduce a stack of repeating residual blocks connected through skip connections, which produce a branch-and-merge computation graph, allowing information to bypass intermediate layers. Consequently, the execution flow is no longer strictly sequential, producing a more complex Directed Acyclic Graph (DAG) structure compared to VGG \cite{resnet}.
 
-\begin{figure}[t]
+\begin{figure}[!t]
 \centering
 \resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
@@ -127,7 +110,7 @@ In contrast, architectures like ResNet are not just one single layer like VGG; t
         minimum width=1.2cm,
         minimum height=0.55cm,
         align=center,
-        font=\footnotesize,
+        font=\scriptsize,
         fill=green!15,
         draw=green!50!black,
         thick
@@ -139,7 +122,7 @@ In contrast, architectures like ResNet are not just one single layer like VGG; t
         fill=orange!20,
         draw=orange!70!black,
         thick,
-        font=\footnotesize
+        font=\scriptsize
     },
     arrow/.style={-{Latex[length=2mm]}, ultra thick, green!60!black}
 ]
@@ -164,16 +147,7 @@ In contrast, architectures like ResNet are not just one single layer like VGG; t
 
 Early architectures, like VGG, mainly got better by increasing network depth. However, increasing network depth made computation expensive. The core idea for architectures like InceptionV3 was to increase representational power without increasing computation cost by executing a module that does multi-scale feature extraction efficiently. Instead of implementing one convolution choice at a layer, i.e., a single convolutional operation, the Inception module does multiple operations in parallel on the same input, then combines them. This produces wide branching inside each module and a concatenation merge, which results in a highly parallel DAG structure \cite{inceptionv3}.
 
-
-
-\subsection{Side-Channel Attacks}
-
-A side-channel attack is a method of extracting information from a system without compromising the primary algorithm directly. Instead of exploiting the model parameters, such as CNN weights or encryption keys, the attacker observes the execution byproducts and indirect signals produced while the system operates. Rather than targeting model parameters or architecture explicitly, side-channel attacks exploit observable characteristics like power consumption, memory access patterns, cache behavior, packet sizes, or inference latency~\cite{kocher,host2020}.
-
-Inference latency represents one of the most examinable and practical side channels in modern machine learning systems. Different neural network architectures demonstrate distinct execution characteristics during inference due to variations in computational graph topology, synchronization behavior, branching patterns, and computational complexity. These factors influence multiple stages of execution, including preprocessing overhead, model computation time, and post-processing latency.
-
-Recent studies on neural-network reverse engineering and model extraction have shown that architectural hints, hardware traces, and query observations can leak information about deployed neural networks \cite{csinn,deepsniffer,dnnreverse,host2020}. As a result, different architectures may produce distinct latency distributions during inference. In black-box deployment settings, an adversary may repeatedly query the model and analyze these timing variations to infer structural information about the underlying architecture.
-\begin{figure}[t]
+\begin{figure}[!t]
 \centering
 \resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
@@ -184,7 +158,7 @@ Recent studies on neural-network reverse engineering and model extraction have s
         minimum width=1.35cm,
         minimum height=0.58cm,
         align=center,
-        font=\footnotesize,
+        font=\scriptsize,
         fill=purple!15,
         draw=purple!60!black,
         thick
@@ -195,7 +169,7 @@ Recent studies on neural-network reverse engineering and model extraction have s
         minimum width=1.35cm,
         minimum height=0.65cm,
         align=center,
-        font=\footnotesize,
+        font=\scriptsize,
         fill=red!15,
         draw=red!60!black,
         thick
@@ -228,6 +202,15 @@ Recent studies on neural-network reverse engineering and model extraction have s
 \caption{Simplified Inception-style multi-branch module with concatenation merge.}
 \label{fig:inception}
 \end{figure}
+
+\subsection{Side-Channel Attacks}
+
+A side-channel attack is a method of extracting information from a system without compromising the primary algorithm directly. Instead of exploiting the model parameters, such as CNN weights or encryption keys, the attacker observes the execution byproducts and indirect signals produced while the system operates. Rather than targeting model parameters or architecture explicitly, side-channel attacks exploit observable characteristics like power consumption, memory access patterns, cache behavior, packet sizes, or inference latency.
+
+Inference latency represents one of the most examinable and practical side channels in modern machine learning systems. Different neural network architectures demonstrate distinct execution characteristics during inference due to variations in computational graph topology, synchronization behavior, branching patterns, and computational complexity. These factors influence multiple stages of execution, including preprocessing overhead, model computation time, and post-processing latency.
+
+Recent studies on neural-network reverse engineering and model extraction have shown that architectural hints, hardware traces, and query observations can leak information about deployed neural networks \cite{csinn,deepsniffer,dnnreverse,host2020}. As a result, different architectures may produce distinct latency distributions during inference. In black-box deployment settings, an adversary may repeatedly query the model and analyze these timing variations to infer structural information about the underlying architecture.
+
 \subsection{Black-Box Setting}
 
 The experiment presumes a black-box deployment environment in which the attacker has no visibility into the internal architecture, parameters, data used in training, or implementation insights of the deployed neural network model. The target is accessible solely through a request-response interface. Despite complete restriction from internal access, the adversary can repeatedly query the model and observe inference response times. These timing records are further analyzed in order to infer structural characteristics of the underlying model.
@@ -237,7 +220,7 @@ The experiment presumes a black-box deployment environment in which the attacker
 
 The threat model utilized in this work presumes an adversary engaging with a remotely hosted neural network system through an API interface. The attacker does not possess any information regarding internal mechanics, architecture, model weights, training dataset, hardware specifics, or implementation details of the deployed architecture.
 
-However, the attacker is sufficiently capable of repeatedly requesting the target system and recording inference response times with high accuracy. By observing latency behavior across multiple readings, the attacker attempts to deduce structural properties of the underlying neural network. The main objective of the adversary is to perform architecture fingerprinting using latency-derived features in a black-box deployment environment~\cite{prada,knockoff}.
+However, the attacker is sufficiently capable of repeatedly requesting the target system and recording inference response times with high accuracy. By observing latency behavior across multiple readings, the attacker attempts to deduce structural properties of the underlying neural network. The main objective of the adversary is to perform architecture fingerprinting using latency-derived features in a black-box deployment environment.
 
 % ---------------- METHODOLOGY ----------------
 \section{Methodology}
@@ -253,7 +236,7 @@ For the purpose of this academic research, four convolutional neural network (CN
     \item InceptionV3
 \end{itemize}
 
-These models were loaded from \texttt{torchvision.models}~\cite{vgg,resnet,inceptionv3} and were selected because they represent significantly different computation graph structures. The first model, VGG, primarily follows a sequential structure, whereas ResNet introduces skip connections and residual blocks that create branch-and-merge computation paths. InceptionV3 further uses parallel branches and concatenation, increasing the structural complexity.
+These models were loaded from \texttt{torchvision.models} and were selected because they represent significantly different computation graph structures. The first model, VGG, primarily follows a sequential structure, whereas ResNet introduces skip connections and residual blocks that create branch-and-merge computation paths. InceptionV3 further uses parallel branches and concatenation, increasing the structural complexity.
 
 These architectural differences make the selected models suitable for evaluating whether computational graph structure influences inference latency and timing behavior.
 
@@ -263,20 +246,20 @@ Inference latency measurements were conducted on an AMD Ryzen 7 5800H CPU with 1
 
 Each architecture executed 100 inference cycles, with individual inference times recorded using \texttt{time.perf\_counter()}. The duration of every forward pass was measured in milliseconds, producing a latency distribution for each architecture. Statistical features including mean latency, standard deviation, minimum latency, maximum latency, and P95 latency were subsequently extracted from these distributions. Figure~\ref{fig:latency_pipeline} illustrates the latency measurement workflow utilized during the experiments.
 
-\begin{figure}[t]
+\begin{figure}[!t]
 \centering
 \resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
-    node distance=0.40cm,
+    node distance=0.75cm,
     block/.style={
         draw,
         rounded corners,
-        minimum width=1.75cm,
-        minimum height=0.76cm,
+        minimum width=2.05cm,
+        minimum height=0.72cm,
         align=center,
-        font=\footnotesize,
-        fill=teal!12,
-        draw=teal!60!black,
+        font=\scriptsize,
+        fill=cyan!12,
+        draw=cyan!60!black,
         thick
     },
     arrow/.style={-{Latex[length=2mm]}, ultra thick, cyan!60!black}
@@ -305,18 +288,18 @@ Latency measurements were grouped across multiple inference queries in order to 
 
 Figure~\ref{fig:feature_pipeline} illustrates the statistical feature extraction pipeline utilized throughout the experiments.
 
-\begin{figure}[t]
+\begin{figure}[!t]
 \centering
 \resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
-    node distance=0.38cm,
+    node distance=0.75cm,
     block/.style={
         draw,
         rounded corners,
-        minimum width=1.70cm,
-        minimum height=0.76cm,
+        minimum width=2.15cm,
+        minimum height=0.72cm,
         align=center,
-        font=\footnotesize,
+        font=\scriptsize,
         fill=yellow!15,
         draw=orange!70!black,
         thick
@@ -345,9 +328,9 @@ The dataset was divided into training and testing subsets using an 80/20 split. 
 
 Classification accuracy, confusion matrices, and classification reports were utilized to evaluate the effectiveness of latency-based architecture fingerprinting. Figure~\ref{fig:classification_pipeline} illustrates the classification workflow implemented during the experiments.
 
-\begin{figure}[t]
+\begin{figure}[!t]
 \centering
-\resizebox{0.98\columnwidth}{!}{
+\resizebox{\columnwidth}{!}{
 \begin{tikzpicture}[
     node distance=0.75cm,
     block/.style={
@@ -377,7 +360,7 @@ Classification accuracy, confusion matrices, and classification reports were uti
 \label{fig:classification_pipeline}
 \end{figure}
 
-
+\FloatBarrier
 
 % ---------------- RESULTS ----------------
 \section{Results}
@@ -386,9 +369,9 @@ Classification accuracy, confusion matrices, and classification reports were uti
 
 Table~\ref{tab:latency_stats} summarizes the observed latency characteristics across all evaluated architectures.
 
-\begin{table}[t]
+\begin{table}[H]
 \centering
-\footnotesize
+\scriptsize
 \caption{Latency Statistics for Different Architectures}
 \label{tab:latency_stats}
 \begin{tabular}{lccc}
@@ -403,20 +386,20 @@ InceptionV3 & 159.8671 & 75.5069 & 346.9756 \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
     ybar,
-    width=0.94\columnwidth,
-    height=5.8cm,
+    width=0.98\columnwidth,
+    height=5.4cm,
     bar width=5pt,
     ylabel={Latency (ms)},
     symbolic x coords={ResNet18,ResNet50,VGG16,InceptionV3},
     xtick=data,
-    x tick label style={rotate=25,anchor=east,font=\scriptsize},
-    xlabel style={font=\footnotesize},
-    ylabel style={font=\footnotesize},
+    x tick label style={rotate=25,anchor=east,font=\tiny},
+    xlabel style={font=\scriptsize},
+    ylabel style={font=\scriptsize},
     ymin=0,
     ymax=650,
     grid=major,
@@ -424,7 +407,7 @@ InceptionV3 & 159.8671 & 75.5069 & 346.9756 \\
         at={(0.5,-0.25)},
         anchor=north,
         legend columns=3,
-        font=\scriptsize
+        font=\tiny
     }
 ]
 \addplot+[fill=blue!40, draw=blue!80!black] coordinates {(ResNet18,42.0168) (ResNet50,128.7198) (VGG16,297.7229) (InceptionV3,159.8671)};
@@ -437,7 +420,7 @@ InceptionV3 & 159.8671 & 75.5069 & 346.9756 \\
 \label{fig:latency_statistics}
 \end{figure}
 
-
+\FloatBarrier
 
 Table~\ref{tab:latency_stats} shows that different neural network architectures exhibit distinct inference latency characteristics. ResNet-18 produced the lowest average latency at 42.0168 ms with relatively low variance, whereas VGG-16 exhibited the highest average latency and the largest latency spread. InceptionV3 and ResNet-50 demonstrated intermediate latency behavior with higher variability compared to ResNet-18.
 
@@ -449,9 +432,9 @@ Figure~\ref{fig:latency_statistics} illustrates the separation between latency d
 
 Table~\ref{tab:classification_accuracy} presents the architecture identification performance achieved using latency-derived features.
 
-\begin{table}[t]
+\begin{table}[H]
 \centering
-\footnotesize
+\scriptsize
 \caption{Model Identification Accuracy}
 \label{tab:classification_accuracy}
 \begin{tabular}{lcc}
@@ -464,28 +447,25 @@ Logistic Regression & 80.00 & L2 regularization \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
     ybar,
-    width=0.94\columnwidth,
-    height=5.8cm,
+    width=0.92\columnwidth,
+    height=4.5cm,
     bar width=20pt,
     ylabel={Accuracy (\%)},
     symbolic x coords={KNN,Logistic Regression},
     xtick=data,
-    x tick label style={
-    rotate=10,
-    anchor=east,
-    font=\scriptsize},
-    xlabel style={font=\footnotesize},
-    ylabel style={font=\footnotesize},
+    x tick label style={font=\tiny},
+    xlabel style={font=\scriptsize},
+    ylabel style={font=\scriptsize},
     ymin=0,
     ymax=100,
     grid=major,
     nodes near coords,
-    nodes near coords style={font=\scriptsize}
+    nodes near coords style={font=\tiny}
 ]
 \addplot+[fill=blue!45, draw=blue!80!black] coordinates {(KNN,86.25) (Logistic Regression,80.00)};
 \end{axis}
@@ -493,13 +473,12 @@ Logistic Regression & 80.00 & L2 regularization \\
 \caption{Architecture identification accuracy using latency-derived statistical features.}
 \label{fig:classification_accuracy}
 \end{figure}
-\begin{table}[t]
+
+\begin{table}[H]
 \centering
 \tiny
 \caption{Classification Report for Model Identification}
 \label{tab:classification_report}
-
-\resizebox{\columnwidth}{!}{
 \begin{tabular}{lccccc}
 \toprule
 Classifier & Class & Precision & Recall & F1-score & Support \\
@@ -514,10 +493,9 @@ LR & VGG-16 & 0.8333 & 1.0000 & 0.9091 & 20 \\
 LR & InceptionV3 & 1.0000 & 0.2000 & 0.3333 & 20 \\
 \bottomrule
 \end{tabular}
-}
 \end{table}
 
-
+\FloatBarrier
 
 Table~\ref{tab:classification_accuracy} summarizes the classification accuracy achieved using latency-derived statistical features. The KNN classifier achieved the highest accuracy of 86.25\%, outperforming Logistic Regression, which achieved 80.00\% accuracy. These results indicate that non-linear neighborhood-based classification methods may better capture variations in latency distributions across architectures.
 
@@ -527,7 +505,7 @@ Overall, the results demonstrate that statistical timing features extracted from
 
 \subsection{Effect of Query Count}
 
-\begin{table}[t]
+\begin{table}[H]
 \centering
 \small
 \caption{Accuracy vs Number of Queries}
@@ -546,12 +524,12 @@ Queries & Accuracy (\%) \\
 \end{tabular}
 \end{table}
 
-\begin{figure}[t]
+\begin{figure}[H]
 \centering
 \begin{tikzpicture}
 \begin{axis}[
     width=0.95\columnwidth,
-    height=5.6cm,
+    height=4.4cm,
     xlabel={Number of Queries (N)},
     ylabel={Classification Accuracy (\%)},
     xmin=0,
@@ -559,12 +537,12 @@ Queries & Accuracy (\%) \\
     ymin=75,
     ymax=91,
     xtick={1,3,5,10,20},
-    xlabel style={font=\footnotesize},
-    ylabel style={font=\footnotesize},
+    xlabel style={font=\scriptsize},
+    ylabel style={font=\scriptsize},
     grid=major,
     mark size=2.7pt,
     nodes near coords,
-    nodes near coords style={font=\footnotesize,anchor=south}
+    nodes near coords style={font=\scriptsize,anchor=south}
 ]
 \addplot[
     thick,
@@ -584,7 +562,7 @@ coordinates {
 \label{fig:accuracy_vs_query_count}
 \end{figure}
 
-
+\FloatBarrier
 
 Looking at Table~\ref{tab:query_accuracy} along with Figure~\ref{fig:accuracy_vs_query_count}, it can be observed that increasing the number of queries generally improves classification accuracy. Performance increased from 80.00\% using a single query to 89.1\% when twenty queries were utilized. Although the improvement is moderate, the overall trend indicates that additional timing observations improve architecture separability.
 
@@ -601,11 +579,11 @@ The results further indicate that latency variability, in addition to average in
 
 Despite the promising results, the experiments were conducted in a controlled CPU-based environment using a limited set of convolutional neural network architectures. Real-world deployment conditions including heterogeneous hardware, background workloads, network jitter, and cloud scheduling behavior may influence latency characteristics and affect fingerprinting performance.
 
-In addition, the current study utilized relatively simple machine learning classifiers and statistical timing descriptors. Future work may investigate more advanced temporal feature extraction techniques, transformer-based architectures~\cite{transformers}, and defensive mechanisms designed to mitigate timing-based information leakage.
+In addition, the current study utilized relatively simple machine learning classifiers and statistical timing descriptors. Future work may investigate more advanced temporal feature extraction techniques, transformer-based architectures, and defensive mechanisms designed to mitigate timing-based information leakage.
 
 The implementation, latency measurement scripts, and experimental configurations associated with this study will be made publicly available through a GitHub repository in order to support reproducibility and further research.
 
-
+\FloatBarrier
 
 % ---------------- CONCLUSION ----------------
 \section{Conclusion}
@@ -618,7 +596,7 @@ The experiments further demonstrated that increasing the number of timing observ
 
 Overall, the results highlight the security implications of timing leakage in machine learning systems and demonstrate the feasibility of latency-based neural network fingerprinting in black-box deployment settings.
 
-
+\FloatBarrier
 
 % ---------------- FUTURE WORK ----------------
 \section{Future Work}
@@ -630,7 +608,7 @@ Further investigation may also incorporate larger and more diverse neural networ
 Another potential research direction involves studying the impact of real-world deployment conditions such as network jitter, concurrent workloads, caching effects, and asynchronous execution pipelines on timing leakage. Evaluating latency-based fingerprinting in realistic cloud and API-driven inference environments would provide deeper insight into the practical feasibility of side-channel attacks against deployed machine learning systems.
 
 Finally, future research may focus on the development of defensive mechanisms designed to mitigate timing leakage during inference. Techniques such as randomized execution delays, timing obfuscation, workload equalization, and constant-time inference strategies could be explored to reduce architecture-dependent side-channel information while maintaining acceptable inference performance.
-\balance
+
 % ---------------- REFERENCES ----------------
 \begin{thebibliography}{99}
 
@@ -672,16 +650,6 @@ C. Zhang et al., ``Understanding Deep Learning System Performance,'' in \textit{
 
 \bibitem{efficientinference}
 S. Han et al., ``EIE: Efficient Inference Engine on Compressed Deep Neural Network,'' in \textit{Proceedings of the International Symposium on Computer Architecture (ISCA)}, 2016.
-
-\bibitem{vgg}
-K. Simonyan and A. Zisserman,
-``Very Deep Convolutional Networks for Large-Scale Image Recognition,''
-in \textit{International Conference on Learning Representations (ICLR)}, 2015.
-
-\bibitem{inception}
-C. Szegedy et al.,
-``Going Deeper with Convolutions,''
-in \textit{Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition (CVPR)}, 2015.
 
 \bibitem{branchynet}
 S. Teerapittayanon, B. McDanel, and H. T. Kung, ``BranchyNet: Fast Inference via Early Exiting from Deep Neural Networks,'' in \textit{Proceedings of the International Conference on Pattern Recognition (ICPR)}, 2016.
