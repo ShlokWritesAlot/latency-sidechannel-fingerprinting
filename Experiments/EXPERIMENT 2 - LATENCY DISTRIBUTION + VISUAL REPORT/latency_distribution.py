@@ -15,6 +15,7 @@ import sys
 import csv
 import time
 import numpy as np
+from scipy.stats import skew, kurtosis, gaussian_kde
 import matplotlib
 matplotlib.use("Agg")          # headless-safe backend
 import matplotlib.pyplot as plt
@@ -31,17 +32,18 @@ MODELS_CONFIG = {
     "resnet50":    models.resnet50,
     "vgg16":       models.vgg16,
     "inception_v3": models.inception_v3,
+    "mobilenet_v2": models.mobilenet_v2,
 }
 NUM_RUNS   = 100
 DEVICE     = torch.device("cpu")
 INPUT_SIZE = (1, 3, 224, 224)
 
-# Colour palette (one per model)
-COLORS = {
-    "resnet18":    "#4FC3F7",   # sky blue
-    "resnet50":    "#81C784",   # sage green
-    "vgg16":       "#FFB74D",   # amber
-    "inception_v3": "#F06292",  # rose
+MODEL_TITLES = {
+    "resnet18": "ResNet-18",
+    "resnet50": "ResNet-50",
+    "vgg16": "VGG-16",
+    "mobilenet_v2": "MobileNetV2",
+    "inception_v3": "InceptionV3",
 }
 # ───────────────────────────────────────────────────────────────────────────────
 
@@ -102,58 +104,65 @@ def plot_distributions(data: dict[str, list[float]], out_path: str) -> None:
     model_names = list(data.keys())
     n = len(model_names)
 
-    fig = plt.figure(figsize=(16, 10), facecolor="#0D1117")
+    # Use white background, default scientific aesthetics
+    plt.style.use("default")
+    fig = plt.figure(figsize=(16, 10))
     fig.suptitle(
         "Inference Latency Distributions per Model",
-        fontsize=18, fontweight="bold", color="white", y=0.98,
+        fontsize=18, fontweight="bold", y=0.98,
     )
 
-    gs = gridspec.GridSpec(2, 2, figure=fig, hspace=0.45, wspace=0.35)
-    axes = [fig.add_subplot(gs[i // 2, i % 2]) for i in range(n)]
+    # 5 subplots: 2 rows, 3 columns
+    gs = gridspec.GridSpec(2, 3, figure=fig, hspace=0.45, wspace=0.35)
+    axes = [fig.add_subplot(gs[i // 3, i % 3]) for i in range(n)]
 
     for ax, name in zip(axes, model_names):
         arr   = np.array(data[name])
-        color = COLORS.get(name, "#90CAF9")
+        title = MODEL_TITLES.get(name, name)
+        
         mean  = arr.mean()
         std   = arr.std()
         p95   = np.percentile(arr, 95)
+        skew_val = skew(arr)
+        kurt_val = kurtosis(arr)
 
-        # Histogram
+        # Histogram (density=True for KDE)
         ax.hist(
-            arr, bins=20, color=color, alpha=0.85,
-            edgecolor="white", linewidth=0.4, zorder=2,
+            arr, bins=30, alpha=0.6, density=True,
+            edgecolor="black", linewidth=1.0, zorder=2, color="lightgray"
         )
+        
+        # KDE Curve
+        kde = gaussian_kde(arr)
+        x_vals = np.linspace(arr.min(), arr.max(), 200)
+        ax.plot(x_vals, kde(x_vals), color="black", linewidth=1.5, zorder=3, label="KDE")
 
         # Mean & P95 lines
-        ax.axvline(mean, color="white",   linestyle="--", linewidth=1.5,
+        ax.axvline(mean, color="red", linestyle="--", linewidth=1.5,
                    label=f"Mean = {mean:.1f} ms")
-        ax.axvline(p95,  color="#FF8A65", linestyle=":",  linewidth=1.5,
+        ax.axvline(p95,  color="blue", linestyle=":",  linewidth=1.5,
                    label=f"P95  = {p95:.1f} ms")
 
         # Styling
-        ax.set_facecolor("#161B22")
-        ax.set_title(name, color="white", fontsize=13, fontweight="bold", pad=8)
-        ax.set_xlabel("Latency (ms)", color="#B0BEC5", fontsize=10)
-        ax.set_ylabel("Frequency",    color="#B0BEC5", fontsize=10)
-        ax.tick_params(colors="#B0BEC5", which="both")
-        for spine in ax.spines.values():
-            spine.set_edgecolor("#30363D")
-        ax.grid(axis="y", color="#30363D", linewidth=0.5, zorder=1)
+        ax.set_title(title, fontsize=14, fontweight="bold", pad=8)
+        ax.set_xlabel("Latency (ms)", fontsize=12)
+        ax.set_ylabel("Density", fontsize=12)
+        ax.tick_params(which="both")
+        ax.grid(axis="y", linestyle="--", alpha=0.7, zorder=1)
 
         # Stats annotation inside plot
-        stats_text = f"μ = {mean:.2f} ms\nσ = {std:.2f} ms\nP95 = {p95:.2f} ms"
+        stats_text = f"μ = {mean:.2f}\nσ = {std:.2f}\nP95 = {p95:.2f}\nSkew = {skew_val:.2f}\nKurt = {kurt_val:.2f}"
         ax.text(
-            0.97, 0.95, stats_text,
+            0.95, 0.95, stats_text,
             transform=ax.transAxes, ha="right", va="top",
-            fontsize=8.5, color="white",
-            bbox=dict(boxstyle="round,pad=0.4", facecolor="#1F2937", alpha=0.8),
+            fontsize=10,
+            bbox=dict(boxstyle="round,pad=0.4", facecolor="white", edgecolor="black", alpha=0.9),
+            zorder=4
         )
 
-        legend = ax.legend(fontsize=8, loc="upper left",
-                           facecolor="#1F2937", edgecolor="#30363D",
-                           labelcolor="white")
+        ax.legend(fontsize=10, loc="center right")
 
-    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close()
     print(f"[OK] Plot saved -> {out_path}")
 
@@ -167,7 +176,9 @@ def main():
 
     data = collect_latencies()
 
-    out_path = os.path.join(os.path.dirname(__file__), "latency_distributions.png")
+    out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "Results"))
+    os.makedirs(out_dir, exist_ok=True)
+    out_path = os.path.join(out_dir, "latency_distributions_paper.png")
     plot_distributions(data, out_path)
 
     # Quick console summary

@@ -1,0 +1,13 @@
+sigma,classifier,mean_accuracy,std_accuracy,macro_f1
+0,KNN,0.7,0.1673,0.6747
+0,Logistic Regression,0.74,0.1855,0.7333
+1,KNN,0.64,0.12,0.611
+1,Logistic Regression,0.68,0.147,0.6747
+5,KNN,0.66,0.049,0.6455
+5,Logistic Regression,0.76,0.08,0.748
+15,KNN,0.7,0.0894,0.6855
+15,Logistic Regression,0.74,0.049,0.7093
+30,KNN,0.6,0.0894,0.5735
+30,Logistic Regression,0.7,0.1095,0.656
+50,KNN,0.52,0.1939,0.48
+50,Logistic Regression,0.72,0.16,0.6949

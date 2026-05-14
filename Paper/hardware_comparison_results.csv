@@ -1,0 +1,7 @@
+hardware_type,classifier,mean_accuracy,std_accuracy,macro_f1
+cpu,KNN,0.66,0.08,0.5909
+cpu,Logistic Regression,0.7,0.0632,0.6507
+gpu,KNN,0.56,0.049,0.5149
+gpu,Logistic Regression,0.68,0.204,0.6507
+mixed,KNN,0.41,0.08,0.3881
+mixed,Logistic Regression,0.43,0.103,0.4151

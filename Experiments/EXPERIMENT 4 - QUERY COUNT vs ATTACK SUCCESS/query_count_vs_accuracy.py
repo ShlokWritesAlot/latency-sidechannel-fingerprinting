@@ -1,49 +1,39 @@
 """
-EXPERIMENT 4 — QUERY COUNT vs ATTACK SUCCESS
-=============================================
+EXPERIMENT 4 — QUERY COUNT vs ATTACK SUCCESS (UPGRADED)
+=======================================================
 Evaluates how classification accuracy changes as a function of the number
 of latency queries (N) used per prediction.
 
-Context (Side-Channel / Model-Fingerprinting scenario):
-  An attacker observes N latency measurements per "probe" and must infer
-  which ML model is running behind an API. Larger N → better features →
-  higher attack success rate.
-
 Pipeline:
-  1. Load (or generate) raw per-run latency values.
-  2. For each N in [1, 3, 5, 10]:
-       a. Group consecutive latency values into windows of size N.
-       b. Compute features: [mean, std] of each window.
-       c. Train a Logistic Regression classifier (80/20 split).
-       d. Record test accuracy.
-  3. Plot accuracy vs N.
-
-Outputs:
-  accuracy_vs_query_count.png
+  1. Load raw per-run latency values.
+  2. For each N in [1, 3, 5, 10, 20]:
+       a. Group consecutive latency values into non-overlapping windows of size N.
+       b. Compute 8 statistical features per window.
+       c. 5-Fold Stratified CV with Logistic Regression.
+       d. Record mean accuracy, std accuracy, macro-F1.
+  3. Plot accuracy vs N with confidence interval shading.
 """
 
-import io
 import os
 import csv
 import sys
 import time
 import warnings
 import numpy as np
-import torch
-import torchvision.models as models
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+import torch
+import torchvision.models as models
+
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
+from sklearn.model_selection import StratifiedKFold
 from sklearn.preprocessing import StandardScaler
-from sklearn.metrics import accuracy_score
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from scipy.stats import skew, kurtosis
 
 warnings.filterwarnings("ignore")
-
-# Force UTF-8 output on Windows cp1252 terminals
-sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 MODELS_CONFIG = {
@@ -51,30 +41,27 @@ MODELS_CONFIG = {
     "resnet50":    models.resnet50,
     "vgg16":       models.vgg16,
     "inception_v3": models.inception_v3,
+    "mobilenet_v2": models.mobilenet_v2,
 }
-NUM_RUNS     = 100          # latency measurements per model
-QUERY_SIZES  = [1, 3, 5, 10]
+NUM_RUNS     = 100
+QUERY_SIZES  = [1, 3, 5, 10, 20]
 DEVICE       = torch.device("cpu")
 INPUT_SIZE   = (1, 3, 224, 224)
 RANDOM_STATE = 42
-# ───────────────────────────────────────────────────────────────────────────────
-
-
-# ── Data helpers ───────────────────────────────────────────────────────────────
 
 def load_csv(path: str) -> dict[str, list[float]]:
     data: dict[str, list[float]] = {}
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
+            if row.get("hardware_type", "cpu") != "cpu":
+                continue
             data.setdefault(row["model"], []).append(float(row["latency_ms"]))
     return data
-
 
 def run_inference(runs: int) -> dict[str, list[float]]:
     input_tensor = torch.randn(*INPUT_SIZE).to(DEVICE)
     results = {}
     for name, fn in MODELS_CONFIG.items():
-        print(f"  [->] {name} ({runs} runs) ...")
         if name == "inception_v3":
             model = fn(weights=None, aux_logits=False).to(DEVICE)
         else:
@@ -90,157 +77,160 @@ def run_inference(runs: int) -> dict[str, list[float]]:
         results[name] = latencies
     return results
 
-
 def collect_data() -> dict[str, list[float]]:
-    csv_path = os.path.join(
-        os.path.dirname(__file__),
-        "..",
-        "EXPERIMENT 1 - LATENCY MEASUREMENT + REPORT",
-        "latency_results.csv",
-    )
+    csv_path = os.path.abspath(os.path.join(
+        os.path.dirname(__file__), "..", "..", "Results", "latency_results.csv"
+    ))
     if os.path.exists(csv_path):
         print(f"[OK] Loaded data from {csv_path}")
         return load_csv(csv_path)
-    print("[!] CSV not found — running inference ...")
     return run_inference(NUM_RUNS)
 
+def extract_features(window: np.ndarray) -> list[float]:
+    mean_val = window.mean()
+    std_val = window.std() if len(window) > 1 else 0.0
+    min_val = window.min()
+    max_val = window.max()
+    p95_val = np.percentile(window, 95) if len(window) > 1 else window[0]
+    skew_val = skew(window) if len(window) > 1 else 0.0
+    kurt_val = kurtosis(window) if len(window) > 1 else 0.0
+    
+    if len(window) > 1 and std_val > 1e-6:
+        lag1 = np.corrcoef(window[:-1], window[1:])[0, 1]
+        if np.isnan(lag1): lag1 = 0.0
+    else:
+        lag1 = 0.0
 
-# ── Feature engineering ────────────────────────────────────────────────────────
+    return [mean_val, std_val, min_val, max_val, p95_val, skew_val, kurt_val, lag1]
 
 def build_dataset_for_n(data: dict[str, list[float]], n: int):
-    """
-    Group each model's latency list into non-overlapping windows of size N.
-    Feature per window: [mean, std]   (if N==1, std is 0 → kept for uniformity)
-    """
     X, y = [], []
     for name, latencies in data.items():
         arr = np.array(latencies)
-        # Discard tail if not divisible
-        num_windows = len(arr) // n
-        for w in range(num_windows):
-            window = arr[w * n : (w + 1) * n]
-            mean_val = window.mean()
-            std_val  = window.std() if n > 1 else 0.0
-            X.append([mean_val, std_val])
+        for i in range(0, len(arr) - n + 1, n):
+            window = arr[i:i+n]
+            features = extract_features(window)
+            X.append(features)
             y.append(name)
     return np.array(X), np.array(y)
 
+def run_experiment(data: dict[str, list[float]]) -> list[dict]:
+    results = []
 
-# ── Experiment loop ────────────────────────────────────────────────────────────
-
-def run_experiment(data: dict[str, list[float]]) -> dict[int, float]:
-    results = {}
-
-    print("-" * 55)
-    print(f"  {'N (queries)':>12}  {'Train samples':>14}  {'Test samples':>12}  {'Accuracy':>10}")
-    print("-" * 55)
+    print("-" * 70)
+    print(f"  {'N (queries)':>12}  {'Samples':>10}  {'Mean Acc':>12}  {'Std Acc':>10}  {'Macro F1':>10}")
+    print("-" * 70)
 
     for n in QUERY_SIZES:
         X, y = build_dataset_for_n(data, n)
+        print(f"[INFO] N={n} generated {len(X)} independent samples")
 
-        if len(X) < 4:
-            print(f"  {n:>12}   Insufficient samples — skipping")
-            results[n] = 0.0
+        unique, counts = np.unique(y, return_counts=True)
+        if len(counts) > 0 and min(counts) < 5:
+            print(f"  {n:>12}   Insufficient samples for 5-fold CV ({min(counts)} per class)")
+            results.append({
+                "n_queries": n, "mean_accuracy": 0.0, "std_accuracy": 0.0, "macro_f1": 0.0
+            })
             continue
 
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.20, random_state=RANDOM_STATE, stratify=y
-        )
-
-        scaler = StandardScaler()
-        X_train_s = scaler.fit_transform(X_train)
-        X_test_s  = scaler.transform(X_test)
-
+        skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=RANDOM_STATE)
         clf = LogisticRegression(max_iter=1000, random_state=RANDOM_STATE)
-        clf.fit(X_train_s, y_train)
-        acc = accuracy_score(y_test, clf.predict(X_test_s))
+        
+        acc_list = []
+        f1_list = []
+        
+        for train_index, test_index in skf.split(X, y):
+            X_train, X_test = X[train_index], X[test_index]
+            y_train, y_test = y[train_index], y[test_index]
+            
+            scaler = StandardScaler()
+            X_train_s = scaler.fit_transform(X_train)
+            X_test_s  = scaler.transform(X_test)
+            
+            clf.fit(X_train_s, y_train)
+            y_pred = clf.predict(X_test_s)
+            
+            acc_list.append(accuracy_score(y_test, y_pred))
+            _, _, f, _ = precision_recall_fscore_support(y_test, y_pred, average="macro", zero_division=0)
+            f1_list.append(f)
 
-        results[n] = acc
-        print(f"  {n:>12}  {len(X_train):>14}  {len(X_test):>12}  {acc*100:>9.2f}%")
+        mean_acc = np.mean(acc_list)
+        std_acc = np.std(acc_list)
+        mean_f1 = np.mean(f1_list)
+
+        results.append({
+            "n_queries": n,
+            "mean_accuracy": round(mean_acc, 4),
+            "std_accuracy": round(std_acc, 4),
+            "macro_f1": round(mean_f1, 4)
+        })
+        print(f"  {n:>12}  {len(X):>10}  {mean_acc*100:>11.2f}%  {std_acc*100:>9.2f}%  {mean_f1:>10.4f}")
 
     return results
 
+def plot_accuracy_vs_n(results: list[dict], out_path: str) -> None:
+    Ns   = [r["n_queries"] for r in results if r["mean_accuracy"] > 0]
+    accs = [r["mean_accuracy"] * 100 for r in results if r["mean_accuracy"] > 0]
+    stds = [r["std_accuracy"] * 100 for r in results if r["mean_accuracy"] > 0]
 
-# ── Plotting ───────────────────────────────────────────────────────────────────
+    plt.style.use("default")
+    fig, ax = plt.subplots(figsize=(9, 5))
 
-def plot_accuracy_vs_n(results: dict[int, float], out_path: str) -> None:
-    Ns   = sorted(results.keys())
-    accs = [results[n] * 100 for n in Ns]
+    accs = np.array(accs)
+    stds = np.array(stds)
 
-    fig, ax = plt.subplots(figsize=(9, 5), facecolor="#0D1117")
-    ax.set_facecolor("#161B22")
+    ax.plot(Ns, accs, color="black", linewidth=2.0, marker="o", markersize=8, zorder=3, label="Mean Accuracy")
+    ax.fill_between(Ns, accs - stds, accs + stds, color="lightgray", alpha=0.5, zorder=2, label="±1 Std. Dev.")
 
-    # Main line + markers
-    ax.plot(Ns, accs, color="#4FC3F7", linewidth=2.5,
-            marker="o", markersize=9, markerfacecolor="#81D4FA",
-            markeredgecolor="white", markeredgewidth=1.2, zorder=3, label="LR Accuracy")
-
-    # Shaded area under curve
-    ax.fill_between(Ns, accs, alpha=0.15, color="#4FC3F7", zorder=2)
-
-    # Annotate each point
     for n, acc in zip(Ns, accs):
         ax.annotate(
             f"{acc:.1f}%",
-            xy=(n, acc), xytext=(0, 12), textcoords="offset points",
-            ha="center", fontsize=10, color="white",
-            fontweight="bold",
+            xy=(n, acc), xytext=(0, 10), textcoords="offset points",
+            ha="center", fontsize=10, fontweight="bold", zorder=4
         )
 
-    # Axes / labels
-    ax.set_xlabel("Number of Queries (N) per Prediction", color="#B0BEC5", fontsize=12)
-    ax.set_ylabel("Classification Accuracy (%)",          color="#B0BEC5", fontsize=12)
+    ax.set_xlabel("Number of Queries (N) per Prediction", fontsize=12)
+    ax.set_ylabel("Classification Accuracy (%)", fontsize=12)
     ax.set_title(
         "Query Count vs Attack Success Rate\n(Model Fingerprinting via Latency Side-Channel)",
-        color="white", fontsize=13, fontweight="bold", pad=14,
+        fontsize=14, fontweight="bold", pad=14,
     )
 
     ax.set_xticks(Ns)
     ax.set_xticklabels([str(n) for n in Ns])
-    ax.set_ylim(0, 110)
-    ax.tick_params(colors="#B0BEC5")
-    for spine in ax.spines.values():
-        spine.set_edgecolor("#30363D")
-    ax.grid(color="#30363D", linewidth=0.6, linestyle="--", zorder=1)
+    ax.set_ylim(max(0, min(accs-stds)-10), 110)
+    ax.grid(color="gray", linewidth=0.5, linestyle="--", alpha=0.5, zorder=1)
 
-    legend = ax.legend(fontsize=10, facecolor="#1F2937",
-                       edgecolor="#30363D", labelcolor="white")
-
-    # Insight annotation
-    insight = (
-        "↑ More queries → richer features\n"
-        "  → higher attack success"
-    )
-    ax.text(
-        0.98, 0.10, insight, transform=ax.transAxes,
-        ha="right", va="bottom", fontsize=9, color="#90CAF9",
-        bbox=dict(boxstyle="round,pad=0.5", facecolor="#1F2937", alpha=0.9),
-    )
+    ax.legend(loc="lower right")
 
     plt.tight_layout()
-    plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=fig.get_facecolor())
+    plt.savefig(out_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"[OK] Plot saved -> {out_path}")
-
-
-# ── Main ───────────────────────────────────────────────────────────────────────
+    print(f"\n[OK] Plot saved -> {out_path}")
 
 def main():
-    print("=" * 55)
-    print("  EXPERIMENT 4 — QUERY COUNT vs ATTACK SUCCESS")
-    print("=" * 55)
+    print("=" * 65)
+    print("  EXPERIMENT 4 — QUERY COUNT vs ATTACK SUCCESS (UPGRADED)")
+    print("=" * 65)
     print(f"  Query sizes tested : {QUERY_SIZES}")
-    print(f"  Classifier         : Logistic Regression")
-    print(f"  Features           : [mean, std] per window")
 
     data    = collect_data()
     results = run_experiment(data)
 
-    out_path = os.path.join(os.path.dirname(__file__), "accuracy_vs_query_count.png")
+    out_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "Results"))
+    os.makedirs(out_dir, exist_ok=True)
+    
+    csv_path = os.path.join(out_dir, "query_window_results.csv")
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["n_queries", "mean_accuracy", "std_accuracy", "macro_f1"])
+        writer.writeheader()
+        writer.writerows(results)
+    print(f"[OK] Results saved -> {csv_path}")
+
+    out_path = os.path.join(out_dir, "accuracy_vs_query_count_paper.png")
     plot_accuracy_vs_n(results, out_path)
 
     print("\n[OK] Experiment 4 complete.")
-
 
 if __name__ == "__main__":
     main()

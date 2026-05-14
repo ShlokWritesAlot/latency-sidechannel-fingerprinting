@@ -1,0 +1,3 @@
+classifier,mean_accuracy,std_accuracy,macro_precision,macro_recall,macro_f1
+KNN (k=5),0.7,0.1673,0.6967,0.7,0.6747
+Logistic Regression,0.74,0.1855,0.7567,0.74,0.7333

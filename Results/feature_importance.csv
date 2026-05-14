@@ -1,0 +1,9 @@
+Feature,Importance
+min,0.2337
+mean,0.2093
+p95,0.1842
+max,0.1773
+skewness,0.075
+std,0.0732
+kurtosis,0.0323
+lag1_autocorr,0.015
